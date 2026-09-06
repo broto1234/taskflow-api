@@ -1,8 +1,27 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../app.js';
 import { env } from '../../src/config/env.js';
+import prisma from '../lib/prisma.js';
+import bcrypt from 'bcryptjs';
+
+beforeAll(async () => {
+  const password = await bcrypt.hash('secret123', 10);
+
+  await prisma.user.upsert({
+    where: {
+      email: 'john@exampleq.com',
+    },
+    update: {},
+    create: {
+      name: 'John Primary',
+      email: 'john@exampleq.com',
+      password,
+      role: 'USER',
+    },
+  });
+});
 
 describe('POST /api/auth/register', () => {
 
@@ -259,8 +278,7 @@ describe('POST /api/auth/login', () => {
       userId: number;
       role: string;
     };
-
-    expect(decoded.userId).toBe(3);
+    expect(decoded.userId).toEqual(expect.any(Number));
     expect(decoded.role).toBe('USER');
   });
 });

@@ -1,8 +1,125 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import prisma from '../lib/prisma.js';
+import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import app from '../app.js';
 
 describe('POST /api/tasks', () => {
+  let johnUserId: number;
+  let otherUserId: number;
+  let adminUserId: number;
+  let johnTaskId: number;
+  let otherUserTaskId: number;
+
+  beforeAll(async () => {
+    await prisma.task.deleteMany({
+      where: {
+        user: {
+          email: {
+            in: [
+              'john@exampleq.com',
+              'john@example.com',
+              'satyo@gmail.com',
+            ],
+          },
+        },
+      },
+    });
+
+    await prisma.user.deleteMany({
+      where: {
+        email: {
+          in: [
+            'john@exampleq.com',
+            'john@example.com',
+            'satyo@gmail.com',
+          ],
+        },
+      },
+    });
+
+    const password = await bcrypt.hash('secret123', 10);
+    const adminPassword = await bcrypt.hash('password123', 10);
+
+    const john = await prisma.user.create({
+      data: {
+        name: 'John Primary',
+        email: 'john@exampleq.com',
+        password,
+        role: 'USER',
+      },
+    });
+
+    const otherUser = await prisma.user.create({
+      data: {
+        name: 'John Secondary',
+        email: 'john@example.com',
+        password,
+        role: 'USER',
+      },
+    });
+
+    const admin = await prisma.user.create({
+      data: {
+        name: 'Satyo',
+        email: 'satyo@gmail.com',
+        password: adminPassword,
+        role: 'ADMIN',
+      },
+    });
+
+    johnUserId = john.id;
+    otherUserId = otherUser.id;
+    adminUserId = admin.id;
+
+    const johnTask = await prisma.task.create({
+      data: {
+        title: 'John test task',
+        userId: johnUserId,
+      },
+    });
+
+    const otherUserTask = await prisma.task.create({
+      data: {
+        title: 'Other user test task',
+        userId: otherUserId,
+      },
+    });
+
+    johnTaskId = johnTask.id;
+    otherUserTaskId = otherUserTask.id;
+  });
+
+  afterAll(async () => {
+  await prisma.task.deleteMany({
+    where: {
+      user: {
+        email: {
+          in: [
+            'john@exampleq.com',
+            'john@example.com',
+            'satyo@gmail.com',
+          ],
+        },
+      },
+    },
+  });
+
+  await prisma.user.deleteMany({
+    where: {
+      email: {
+        in: [
+          'john@exampleq.com',
+          'john@example.com',
+          'satyo@gmail.com',
+        ],
+      },
+    },
+  });
+
+  await prisma.$disconnect();
+});
+
   it('should return 401 when no token is provided', async () => {
     const response = await request(app)
       .post('/api/tasks')
@@ -152,7 +269,7 @@ describe('POST /api/tasks', () => {
 
     // Task 6 belongs to another user
     const response = await request(app)
-      .get('/api/tasks/6')
+      .get(`/api/tasks/${otherUserTaskId}`)
       .set('Authorization', `Bearer ${token}`);
 
     expect(response.status).toBe(404);
@@ -165,7 +282,7 @@ describe('POST /api/tasks', () => {
 
   it('should return 401 when no token is provided', async () => {
     const response = await request(app)
-      .put('/api/tasks/8')
+      .put(`/api/tasks/${johnTaskId}`)
       .send({
         title: 'Updated task',
       });
@@ -191,7 +308,7 @@ describe('POST /api/tasks', () => {
     const token = loginResponse.body.data.token;
 
     const response = await request(app)
-      .put('/api/tasks/9')
+      .put(`/api/tasks/${johnTaskId}`)
       .set('Authorization', `Bearer ${token}`)
       .send({
         title: 'Updated by owner',
@@ -200,7 +317,7 @@ describe('POST /api/tasks', () => {
     expect(response.status).toBe(200);
 
     expect(response.body.success).toBe(true);
-    expect(response.body.data).toHaveProperty('id', 9);
+    expect(response.body.data).toHaveProperty('id', johnTaskId);
     expect(response.body.data.title).toBe('Updated by owner');
   });
 
@@ -219,7 +336,7 @@ describe('POST /api/tasks', () => {
 
     // Try to update John's task
     const response = await request(app)
-      .put('/api/tasks/9')
+      .put(`/api/tasks/${johnTaskId}`)
       .set('Authorization', `Bearer ${token}`)
       .send({
         title: 'Unauthorized update',
@@ -246,7 +363,7 @@ describe('POST /api/tasks', () => {
     const token = loginResponse.body.data.token;
 
     const response = await request(app)
-      .put('/api/tasks/9')
+      .put(`/api/tasks/${johnTaskId}`)
       .set('Authorization', `Bearer ${token}`)
       .send({
         title: 'Admin updated task',
@@ -271,7 +388,7 @@ describe('POST /api/tasks', () => {
     const token = loginResponse.body.data.token;
 
     const response = await request(app)
-      .put('/api/tasks/8')
+      .put(`/api/tasks/${johnTaskId}`)
       .set('Authorization', `Bearer ${token}`)
       .send({
         title: '',
@@ -311,7 +428,7 @@ describe('POST /api/tasks', () => {
   // DELETE /api/tasks/:id — delete a task
   it('should return 401 when deleting a task without authentication', async () => {
     const response = await request(app)
-      .delete('/api/tasks/9');
+      .delete(`/api/tasks/${johnTaskId}`);
 
     expect(response.status).toBe(401);
 
@@ -321,7 +438,7 @@ describe('POST /api/tasks', () => {
     });
   });
 
-  // Option A. Create a task specifically for this test, then delete it
+  // Create a task specifically for this test, then delete it
   it('should allow the owner to delete their own task', async () => {
     // 1. Login as John
     const loginResponse = await request(app)
@@ -363,36 +480,12 @@ describe('POST /api/tasks', () => {
     });
   });
 
-  // //Option B.  When deleted, next time this ID will not be found
-  // it('should allow the owner to delete their own task', async () => {
-  //   const loginResponse = await request(app)
-  //     .post('/api/auth/login')
-  //     .send({
-  //       email: 'john@exampleq.com',
-  //       password: 'secret123',
-  //     });
-
-  //   expect(loginResponse.status).toBe(200);
-
-  //   const token = loginResponse.body.data.token;
-
-  //   const response = await request(app)
-  //     .delete('/api/tasks/8')
-  //     .set('Authorization', `Bearer ${token}`);
-
-  //   expect(response.status).toBe(200);
-
-  //   expect(response.body).toEqual({
-  //     success: true,
-  //     message: 'Task with ID 8 has been deleted successfully.',
-  //   });
-  // });
-
   it('should return 403 when another USER tries to delete someone else\'s task', async () => {
+    
     const loginResponse = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'john@exampleq.com',
+        email: 'john@example.com',
         password: 'secret123',
       });
 
@@ -401,9 +494,9 @@ describe('POST /api/tasks', () => {
     const token = loginResponse.body.data.token;
 
     const response = await request(app)
-      .delete('/api/tasks/7')
+      .delete(`/api/tasks/${johnTaskId}`)
       .set('Authorization', `Bearer ${token}`);
-
+    
     expect(response.status).toBe(403);
 
     expect(response.body).toEqual({
@@ -413,7 +506,7 @@ describe('POST /api/tasks', () => {
   });
 
 
-  // Option A. Create a task specifically for this test, then delete it
+  // Create a task specifically for this test, then delete it
   it('should allow ADMIN to delete another user\'s task', async () => {
     // 1. Login as John
     const userLoginResponse = await request(app)
@@ -466,31 +559,6 @@ describe('POST /api/tasks', () => {
       message: `Task with ID ${taskId} has been deleted successfully.`,
     });
   });
-
-  // Option B. Delete a task by its ID
-  // it('should allow ADMIN to delete another user\'s task', async () => {
-  //   const loginResponse = await request(app)
-  //     .post('/api/auth/login')
-  //     .send({
-  //       email: 'satyo@gmail.com',
-  //       password: 'password123',
-  //     });
-
-  //   expect(loginResponse.status).toBe(200);
-
-  //   const token = loginResponse.body.data.token;
-
-  //   const response = await request(app)
-  //     .delete('/api/tasks/2')
-  //     .set('Authorization', `Bearer ${token}`);
-
-  //   expect(response.status).toBe(200);
-
-  //   expect(response.body).toEqual({
-  //     success: true,
-  //     message: 'Task with ID 2 has been deleted successfully.',
-  //   });
-  // });
 
   it('should return 404 when deleting a task that does not exist', async () => {
     const loginResponse = await request(app)

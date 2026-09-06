@@ -1,8 +1,68 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import app from '../app.js';
+import bcrypt from 'bcryptjs';
+import prisma from '../lib/prisma.js';
 
 describe('GET /api/users', () => {
+  beforeAll(async () => {
+    await prisma.task.deleteMany({
+      where: {
+        user: {
+          email: {
+            in: [
+              'john@exampleq.com',
+              'john@example.com',
+              'satyo@gmail.com',
+            ],
+          },
+        },
+      },
+    });
+
+    await prisma.user.deleteMany({
+      where: {
+        email: {
+          in: [
+            'john@exampleq.com',
+            'john@example.com',
+            'satyo@gmail.com',
+          ],
+        },
+      },
+    });
+
+    const password = await bcrypt.hash('secret123', 10);
+    const adminPassword = await bcrypt.hash('password123', 10);
+
+    await prisma.user.create({
+      data: {
+        name: 'John Primary',
+        email: 'john@exampleq.com',
+        password,
+        role: 'USER',
+      },
+    });
+
+    await prisma.user.create({
+      data: {
+        name: 'John Secondary',
+        email: 'john@example.com',
+        password,
+        role: 'USER',
+      },
+    });
+
+    await prisma.user.create({
+      data: {
+        name: 'Satyo',
+        email: 'satyo@gmail.com',
+        password: adminPassword,
+        role: 'ADMIN',
+      },
+    });
+  });
+
   it('should return 401 when no token is provided', async () => {
     const response = await request(app)
       .get('/api/users');
