@@ -3,13 +3,20 @@ import prisma from '../lib/prisma.js';
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import app from '../app.js';
+import { createTestUsers,TEST_USERS } from './fixtures/user.fixture.js';
 
-describe('POST /api/tasks', () => {
+describe('/api/tasks', async() => {
   let johnUserId: number;
   let otherUserId: number;
   let adminUserId: number;
   let johnTaskId: number;
   let otherUserTaskId: number;
+
+  const { john, otherUser, admin } = await createTestUsers();
+
+  johnUserId = john.id;
+  otherUserId = otherUser.id;
+  adminUserId = admin.id;
 
   beforeAll(async () => {
     await prisma.task.deleteMany({
@@ -17,9 +24,9 @@ describe('POST /api/tasks', () => {
         user: {
           email: {
             in: [
-              'john@exampleq.com',
-              'john@example.com',
-              'satyo@gmail.com',
+              TEST_USERS.john.email,
+              TEST_USERS.otherUser.email,
+              TEST_USERS.admin.email,
             ],
           },
         },
@@ -30,9 +37,9 @@ describe('POST /api/tasks', () => {
       where: {
         email: {
           in: [
-            'john@exampleq.com',
-            'john@example.com',
-            'satyo@gmail.com',
+            TEST_USERS.john.email,
+            TEST_USERS.otherUser.email,
+            TEST_USERS.admin.email,
           ],
         },
       },
@@ -79,6 +86,14 @@ describe('POST /api/tasks', () => {
       },
     });
 
+    await prisma.task.create({
+      data: {
+        title: 'Completed test task',
+        status: 'COMPLETED',
+        userId: johnUserId,
+      },
+    });
+
     const otherUserTask = await prisma.task.create({
       data: {
         title: 'Other user test task',
@@ -116,8 +131,6 @@ describe('POST /api/tasks', () => {
       },
     },
   });
-
-  await prisma.$disconnect();
 });
 
   it('should return 401 when no token is provided', async () => {
@@ -141,8 +154,8 @@ describe('POST /api/tasks', () => {
     const loginResponse = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'john@exampleq.com',
-        password: 'secret123',
+        email: TEST_USERS.john.email,
+        password: TEST_USERS.john.password,
       });
 
     expect(loginResponse.status).toBe(200);
@@ -173,8 +186,8 @@ describe('POST /api/tasks', () => {
     const loginResponse = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'john@exampleq.com',
-        password: 'secret123',
+        email: TEST_USERS.john.email,
+        password: TEST_USERS.john.password,
       });
 
     expect(loginResponse.status).toBe(200);
@@ -195,7 +208,6 @@ describe('POST /api/tasks', () => {
     expect(response.body.errors).toBeDefined();
   });
 
-
   it('should return 401 when no token is provided', async () => {
     const response = await request(app)
       .get('/api/tasks/1');
@@ -212,8 +224,8 @@ describe('POST /api/tasks', () => {
     const loginResponse = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'john@exampleq.com',
-        password: 'secret123',
+        email: TEST_USERS.john.email,
+        password: TEST_USERS.john.password,
       });
 
     expect(loginResponse.status).toBe(200);
@@ -255,19 +267,19 @@ describe('POST /api/tasks', () => {
   });
 
   it('should return 404 when a user tries to access another user\'s task', async () => {
-    // Login as John (USER id 3)
+    // Login as John
     const loginResponse = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'john@exampleq.com',
-        password: 'secret123',
+        email: TEST_USERS.john.email,
+        password: TEST_USERS.john.password,
       });
 
     expect(loginResponse.status).toBe(200);
 
     const token = loginResponse.body.data.token;
 
-    // Task 6 belongs to another user
+    // Task belongs to another user
     const response = await request(app)
       .get(`/api/tasks/${otherUserTaskId}`)
       .set('Authorization', `Bearer ${token}`);
@@ -321,13 +333,136 @@ describe('POST /api/tasks', () => {
     expect(response.body.data.title).toBe('Updated by owner');
   });
 
+  it('should paginate tasks', async () => {
+        const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'john@exampleq.com',
+        password: 'secret123',
+      });
+
+    expect(loginResponse.status).toBe(200);
+
+    const token = loginResponse.body.data.token;
+
+    const response = await request(app)
+      .get('/api/tasks?page=1&limit=2')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.pagination.page).toBe(1);
+    expect(response.body.data.pagination.limit).toBe(2);
+    expect(response.body.data.tasks.length).toBeLessThanOrEqual(2);
+  });
+
+  it('should filter tasks by status', async () => {
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'john@exampleq.com',
+        password: 'secret123',
+      });
+
+    expect(loginResponse.status).toBe(200);
+
+    const token = loginResponse.body.data.token;
+
+    const response = await request(app)
+      .get('/api/tasks?status=COMPLETED')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+
+    expect(
+      response.body.data.tasks.every(
+        (task: { status: string }) => task.status === 'COMPLETED'
+      )
+    ).toBe(true);
+  });
+
+  it('should search tasks by title', async () => {
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'john@exampleq.com',
+        password: 'secret123',
+      });
+
+    expect(loginResponse.status).toBe(200);
+
+    const token = loginResponse.body.data.token;
+
+    const response = await request(app)
+      .get('/api/tasks?search=Completed')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+
+    expect(response.body.data.tasks.length).toBeGreaterThan(0);
+
+    expect(
+      response.body.data.tasks.every(
+        (task: { title: string }) =>
+          task.title.toLowerCase().includes('completed')
+      )
+    ).toBe(true);
+  });
+
+  it('should sort tasks by title in ascending order', async () => {
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'john@exampleq.com',
+        password: 'secret123',
+      });
+
+    expect(loginResponse.status).toBe(200);
+
+    const token = loginResponse.body.data.token;
+
+    const response = await request(app)
+      .get('/api/tasks?sortBy=title&order=asc')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+
+    const tasks = response.body.data.tasks;
+
+    for (let i = 1; i < tasks.length; i++) {
+      expect(
+        tasks[i - 1].title.localeCompare(tasks[i].title)
+      ).toBeLessThanOrEqual(0);
+    }
+  });
+
+  it('should return 400 when pagination limit is invalid', async () => {
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: 'john@exampleq.com',
+        password: 'secret123',
+      });
+
+    expect(loginResponse.status).toBe(200);
+
+    const token = loginResponse.body.data.token;
+
+    const response = await request(app)
+      .get('/api/tasks?limit=101')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toBe('Validation failed');
+  });
+
   it('should return 403 when another USER tries to update someone else\'s task', async () => {
     // Login as another USER
     const loginResponse = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'john@example.com',
-        password: 'secret123',
+        email: TEST_USERS.otherUser.email,
+        password: TEST_USERS.otherUser.password,
       });
 
     expect(loginResponse.status).toBe(200);
@@ -354,8 +489,8 @@ describe('POST /api/tasks', () => {
     const loginResponse = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'satyo@gmail.com',
-        password: 'password123',
+        email: TEST_USERS.admin.email,
+        password: TEST_USERS.admin.password,
       });
 
     expect(loginResponse.status).toBe(200);
@@ -485,8 +620,8 @@ describe('POST /api/tasks', () => {
     const loginResponse = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'john@example.com',
-        password: 'secret123',
+        email: TEST_USERS.otherUser.email,
+        password: TEST_USERS.otherUser.password,
       });
 
     expect(loginResponse.status).toBe(200);
@@ -512,8 +647,8 @@ describe('POST /api/tasks', () => {
     const userLoginResponse = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'john@exampleq.com',
-        password: 'secret123',
+        email: TEST_USERS.john.email,
+        password: TEST_USERS.john.password,
       });
 
     expect(userLoginResponse.status).toBe(200);
@@ -539,8 +674,8 @@ describe('POST /api/tasks', () => {
     const adminLoginResponse = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'satyo@gmail.com',
-        password: 'password123',
+        email: TEST_USERS.admin.email,
+        password: TEST_USERS.admin.password,
       });
 
     expect(adminLoginResponse.status).toBe(200);

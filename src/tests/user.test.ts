@@ -1,66 +1,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import app from '../app.js';
-import bcrypt from 'bcryptjs';
-import prisma from '../lib/prisma.js';
+import { createTestUsers, TEST_USERS } from './fixtures/user.fixture.js';
 
-describe('GET /api/users', () => {
+describe('/api/users', () => {
   beforeAll(async () => {
-    await prisma.task.deleteMany({
-      where: {
-        user: {
-          email: {
-            in: [
-              'john@exampleq.com',
-              'john@example.com',
-              'satyo@gmail.com',
-            ],
-          },
-        },
-      },
-    });
-
-    await prisma.user.deleteMany({
-      where: {
-        email: {
-          in: [
-            'john@exampleq.com',
-            'john@example.com',
-            'satyo@gmail.com',
-          ],
-        },
-      },
-    });
-
-    const password = await bcrypt.hash('secret123', 10);
-    const adminPassword = await bcrypt.hash('password123', 10);
-
-    await prisma.user.create({
-      data: {
-        name: 'John Primary',
-        email: 'john@exampleq.com',
-        password,
-        role: 'USER',
-      },
-    });
-
-    await prisma.user.create({
-      data: {
-        name: 'John Secondary',
-        email: 'john@example.com',
-        password,
-        role: 'USER',
-      },
-    });
-
-    await prisma.user.create({
-      data: {
-        name: 'Satyo',
-        email: 'satyo@gmail.com',
-        password: adminPassword,
-        role: 'ADMIN',
-      },
-    });
+    await createTestUsers();
   });
 
   it('should return 401 when no token is provided', async () => {
@@ -80,8 +25,8 @@ describe('GET /api/users', () => {
     const loginResponse = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'john@exampleq.com',
-        password: 'secret123',
+        email: TEST_USERS.john.email,
+        password: TEST_USERS.john.password,
       });
 
     expect(loginResponse.status).toBe(200);
@@ -106,8 +51,8 @@ describe('GET /api/users', () => {
     const loginResponse = await request(app)
       .post('/api/auth/login')
       .send({
-        email: 'satyo@gmail.com',
-        password: 'password123',
+        email: TEST_USERS.admin.email,
+        password: TEST_USERS.admin.password,
       });
 
     expect(loginResponse.status).toBe(200);
