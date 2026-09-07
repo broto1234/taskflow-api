@@ -1,11 +1,15 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, } from 'vitest';
 import request from 'supertest';
 import app from '../app.js';
-import { createTestUsers, TEST_USERS } from './fixtures/user.fixture.js';
+import { cleanupTestUsers, createTestUsers, TEST_USERS } from './fixtures/user.fixture.js';
 
 describe('/api/users', () => {
   beforeAll(async () => {
     await createTestUsers();
+  });
+
+  afterAll(async () => {
+    await cleanupTestUsers();
   });
 
   it('should return 401 when no token is provided', async () => {

@@ -3,7 +3,7 @@ import prisma from '../lib/prisma.js';
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import app from '../app.js';
-import { createTestUsers,TEST_USERS } from './fixtures/user.fixture.js';
+import { createTestUsers, cleanupTestUsers, TEST_USERS } from './fixtures/user.fixture.js';
 
 describe('/api/tasks', async() => {
   let johnUserId: number;
@@ -11,69 +11,9 @@ describe('/api/tasks', async() => {
   let adminUserId: number;
   let johnTaskId: number;
   let otherUserTaskId: number;
-
-  const { john, otherUser, admin } = await createTestUsers();
-
-  johnUserId = john.id;
-  otherUserId = otherUser.id;
-  adminUserId = admin.id;
-
+  
   beforeAll(async () => {
-    await prisma.task.deleteMany({
-      where: {
-        user: {
-          email: {
-            in: [
-              TEST_USERS.john.email,
-              TEST_USERS.otherUser.email,
-              TEST_USERS.admin.email,
-            ],
-          },
-        },
-      },
-    });
-
-    await prisma.user.deleteMany({
-      where: {
-        email: {
-          in: [
-            TEST_USERS.john.email,
-            TEST_USERS.otherUser.email,
-            TEST_USERS.admin.email,
-          ],
-        },
-      },
-    });
-
-    const password = await bcrypt.hash('secret123', 10);
-    const adminPassword = await bcrypt.hash('password123', 10);
-
-    const john = await prisma.user.create({
-      data: {
-        name: 'John Primary',
-        email: 'john@exampleq.com',
-        password,
-        role: 'USER',
-      },
-    });
-
-    const otherUser = await prisma.user.create({
-      data: {
-        name: 'John Secondary',
-        email: 'john@example.com',
-        password,
-        role: 'USER',
-      },
-    });
-
-    const admin = await prisma.user.create({
-      data: {
-        name: 'Satyo',
-        email: 'satyo@gmail.com',
-        password: adminPassword,
-        role: 'ADMIN',
-      },
-    });
+    const { john, otherUser, admin } = await createTestUsers();
 
     johnUserId = john.id;
     otherUserId = otherUser.id;
@@ -106,32 +46,8 @@ describe('/api/tasks', async() => {
   });
 
   afterAll(async () => {
-  await prisma.task.deleteMany({
-    where: {
-      user: {
-        email: {
-          in: [
-            'john@exampleq.com',
-            'john@example.com',
-            'satyo@gmail.com',
-          ],
-        },
-      },
-    },
+    await cleanupTestUsers();
   });
-
-  await prisma.user.deleteMany({
-    where: {
-      email: {
-        in: [
-          'john@exampleq.com',
-          'john@example.com',
-          'satyo@gmail.com',
-        ],
-      },
-    },
-  });
-});
 
   it('should return 401 when no token is provided', async () => {
     const response = await request(app)
