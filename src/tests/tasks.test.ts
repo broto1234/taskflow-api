@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import prisma from '../lib/prisma.js';
-import bcrypt from 'bcryptjs';
 import request from 'supertest';
 import app from '../app.js';
 import { createTestUsers, cleanupTestUsers, TEST_USERS } from './fixtures/user.fixture.js';
+import { createTaskWithAudit } from '../services/task.service.js';
 
 describe('/api/tasks', async() => {
   let johnUserId: number;
@@ -96,6 +96,26 @@ describe('/api/tasks', async() => {
     expect(response.body.data).toHaveProperty('id');
 
     expect(response.body.data.title).toBe('Test task');
+  });
+
+  it('creates a task and audit log in a transaction', async () => {
+    const task = await createTaskWithAudit(
+      'Transaction test task',
+      johnUserId,
+    );
+
+    const auditLog = await prisma.auditLog.findFirst({
+      where: {
+        taskId: task.id,
+        userId: johnUserId,
+      },
+    });
+
+    expect(task.title).toBe('Transaction test task');
+    expect(auditLog).not.toBeNull();
+    expect(auditLog?.action).toBe('TASK_CREATED');
+    expect(auditLog?.taskId).toBe(task.id);
+    expect(auditLog?.userId).toBe(johnUserId);
   });
 
   it('should return 400 when title is missing', async () => {
@@ -340,6 +360,8 @@ describe('/api/tasks', async() => {
       .get('/api/tasks?sortBy=title&order=asc')
       .set('Authorization', `Bearer ${token}`);
 
+    console.log('STATUS:', response.status);
+    console.log('BODY:', JSON.stringify(response.body, null, 2));
     expect(response.status).toBe(200);
 
     const tasks = response.body.data.tasks;
@@ -609,6 +631,52 @@ describe('/api/tasks', async() => {
       success: true,
       message: `Task with ID ${taskId} has been deleted successfully.`,
     });
+  });
+
+
+  it('should invalidate task cache when creating a task', async () => {
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: TEST_USERS.john.email,
+        password: TEST_USERS.john.password,
+      });
+
+    expect(loginResponse.status).toBe(200);
+
+    const token = loginResponse.body.data.token;
+
+    // First request creates the cache
+    const firstResponse = await request(app)
+      .get('/api/tasks')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(firstResponse.status).toBe(200);
+
+    // Create a new task
+    const createResponse = await request(app)
+      .post('/api/tasks')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        title: 'Cache invalidation test',
+      });
+
+    expect(createResponse.status).toBe(201);
+
+    // Cache should have been invalidated,
+    // so this request gets fresh data
+    const secondResponse = await request(app)
+      .get('/api/tasks')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(secondResponse.status).toBe(200);
+
+    expect(
+      secondResponse.body.data.tasks.some(
+        (task: { title: string }) =>
+          task.title === 'Cache invalidation test',
+      ),
+    ).toBe(true);
   });
 
   it('should return 404 when deleting a task that does not exist', async () => {

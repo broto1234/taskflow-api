@@ -2,6 +2,7 @@ import prisma from '../lib/prisma.js';
 import { Prisma, TaskStatus, UserRole } from '../generated/prisma/client.js';
 import { AppError } from '../errors/AppError.js';
 import { TaskQuery } from '../schemas/pagination.schema.js';
+import { getCache, setCache, deleteUserTaskCache } from '../lib/cache.js';
 
 export const getAllTasks = async (
   userId: number,
@@ -10,6 +11,14 @@ export const getAllTasks = async (
   
   const { page, limit, status, search, sortBy, order } = query;
   const skip = (page - 1) * limit;
+
+  const cacheKey = `tasks:user:${userId}:page:${page}:limit:${limit}:status:${status ?? 'all'}:search:${search ?? 'none'}:sortBy:${sortBy}:order:${order}`;
+
+  const cached = await getCache(cacheKey);
+
+  if (cached) {
+    return JSON.parse(cached);
+  }
 
   const where: Prisma.TaskWhereInput = {
     userId,
@@ -39,7 +48,7 @@ export const getAllTasks = async (
 
   const totalPages = Math.ceil(total / limit);
 
-  return {
+  const result = {
     tasks,
     pagination: {
       page,
@@ -48,7 +57,12 @@ export const getAllTasks = async (
       totalPages,
     },
   };
+
+  await setCache(cacheKey, JSON.stringify(result), 60);
+
+  return result;
 };
+
 
 export const getTaskById = async (
   id: number,
@@ -69,13 +83,45 @@ export const createTask = async (
   description?: string,
   status?: TaskStatus,
 ) => {
-  return await prisma.task.create({
+  const task = await prisma.task.create({
     data: {
       title,
       userId,
       description,
       status,
     },
+  });
+
+  await deleteUserTaskCache(userId);
+
+  return task;
+};
+
+export const createTaskWithAudit = async (
+  title: string,
+  userId: number,
+  description?: string,
+  status?: TaskStatus,
+) => {
+  return prisma.$transaction(async (tx) => {
+    const task = await tx.task.create({
+      data: {
+        title,
+        userId,
+        description,
+        status,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        action: 'TASK_CREATED',
+        taskId: task.id,
+        userId,
+      },
+    });
+
+    return task;
   });
 };
 
@@ -104,7 +150,7 @@ export const updateTask = async (
     throw new AppError('You are not allowed to modify this task', 403);
   }
 
-  return prisma.task.update({
+  const updatedTask = await prisma.task.update({
     where: {
       id: taskId,
     },
@@ -114,6 +160,10 @@ export const updateTask = async (
       ...(status !== undefined && { status }),
     },
   });
+
+  await deleteUserTaskCache(task.userId);
+
+  return updatedTask;
 };
 
 
@@ -140,9 +190,13 @@ export const deleteTask = async (
     throw new AppError('You are not allowed to delete this task', 403);
   }
 
-  return prisma.task.delete({
+  const deletedTask = await prisma.task.delete({
     where: {
       id: taskId,
     },
   });
+
+  await deleteUserTaskCache(task.userId);
+
+  return deletedTask;
 };

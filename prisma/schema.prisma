@@ -28,6 +28,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   tasks     Task[]
+  auditLogs AuditLog[]
 }
 
 model Task {
@@ -40,4 +41,14 @@ model Task {
 
   userId      Int
   user        User       @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  action    String
+  taskId    Int
+  userId    Int
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
 }

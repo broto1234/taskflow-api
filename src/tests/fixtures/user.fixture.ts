@@ -23,6 +23,7 @@ export const TEST_USERS = {
 };
 
 export async function createTestUsers() {
+
   await prisma.task.deleteMany({
     where: {
       user: {
@@ -36,6 +37,21 @@ export async function createTestUsers() {
       },
     },
   });
+
+  await prisma.auditLog.deleteMany({
+    where: {
+      user: {
+        email: {
+          in: [
+            TEST_USERS.john.email,
+            TEST_USERS.otherUser.email,
+            TEST_USERS.admin.email,
+          ],
+        },
+      },
+    },
+  });
+
 
   await prisma.user.deleteMany({
     where: {
@@ -92,6 +108,20 @@ export async function createTestUsers() {
 
 export async function cleanupTestUsers() {
   await prisma.task.deleteMany({
+    where: {
+      user: {
+        email: {
+          in: [
+            TEST_USERS.john.email,
+            TEST_USERS.otherUser.email,
+            TEST_USERS.admin.email,
+          ],
+        },
+      },
+    },
+  });
+
+  await prisma.auditLog.deleteMany({
     where: {
       user: {
         email: {
