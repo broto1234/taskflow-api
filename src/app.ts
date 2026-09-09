@@ -10,6 +10,7 @@ import helmet from 'helmet';
 import { globalLimiter } from './middleware/rateLimit.middleware.js';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/swagger.js';
+import taskAttachmentRouter from './routes/task-attachment.route.js';
 
 const app = express();  // Create an Express application instance
 
@@ -51,6 +52,9 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/tasks', taskRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/users', userRouter);
+app.use('/api/tasks', taskAttachmentRouter);
+
+
 app.use(errorHandler);
 
 export default app;

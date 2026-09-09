@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import jwt from 'jsonwebtoken';
 import { Prisma } from '../generated/prisma/client.js';
 import { AppError } from '../errors/AppError.js';
+import multer from 'multer';
 // import logger from '../lib/logger.js';
 
 export const errorHandler = (
@@ -84,6 +85,26 @@ export const errorHandler = (
       success: false,
       message: 'Invalid token',
     });
+    return;
+  }
+
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      res.status(400).json({
+        success: false,
+        message: 'File too large. Maximum size is 5 MB',
+      });
+
+      return;
+    }
+  }
+
+  if (error instanceof Error && error.name === 'MulterFileTypeError') {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+
     return;
   }
 

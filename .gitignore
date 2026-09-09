@@ -4,3 +4,4 @@ node_modules
 .windsurf
 .agents
 src/generated/prisma
+uploads/

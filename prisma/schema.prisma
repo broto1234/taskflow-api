@@ -29,6 +29,7 @@ model User {
 
   tasks     Task[]
   auditLogs AuditLog[]
+  attachments TaskAttachment[]
 }
 
 model Task {
@@ -41,6 +42,7 @@ model Task {
 
   userId      Int
   user        User       @relation(fields: [userId], references: [id])
+  attachments TaskAttachment[]
 }
 
 model AuditLog {
@@ -51,4 +53,19 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   user      User     @relation(fields: [userId], references: [id])
+}
+
+model TaskAttachment {
+  id           Int      @id @default(autoincrement())
+  originalName String
+  storedName   String
+  mimeType     String
+  size         Int
+  path         String
+  taskId       Int
+  userId       Int
+  createdAt    DateTime @default(now())
+
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id])
 }

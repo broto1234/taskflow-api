@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../app.js';
@@ -19,6 +19,19 @@ beforeAll(async () => {
       email: 'john@exampleq.com',
       password,
       role: 'USER',
+    },
+  });
+});
+
+afterAll(async () => {
+  await prisma.user.deleteMany({
+    where: {
+      OR: [
+        { email: { startsWith: 'test-' } },
+        { email: { startsWith: 'duplicate-' } },
+        { email: { startsWith: 'register-login-' } },
+        { email: { startsWith: 'default-role-' } },
+      ],
     },
   });
 });

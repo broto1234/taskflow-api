@@ -3,7 +3,9 @@ import prisma from '../lib/prisma.js';
 import request from 'supertest';
 import app from '../app.js';
 import { createTestUsers, cleanupTestUsers, TEST_USERS } from './fixtures/user.fixture.js';
-import { createTaskWithAudit } from '../services/task.service.js';
+import { createTaskWithAudit, createTaskAttachment } from '../services/task.service.js';
+import { readdir } from 'node:fs/promises';
+
 
 describe('/api/tasks', async() => {
   let johnUserId: number;
@@ -116,6 +118,217 @@ describe('/api/tasks', async() => {
     expect(auditLog?.action).toBe('TASK_CREATED');
     expect(auditLog?.taskId).toBe(task.id);
     expect(auditLog?.userId).toBe(johnUserId);
+  });
+
+  it('should create a task attachment', async () => {
+    const attachment = await createTaskAttachment(
+      'test.pdf',
+      'e5cdd1a0-e516-451b-8b68-4aab54ae1e03.pdf',
+      'application/pdf',
+      296879,
+      'uploads/e5cdd1a0-e516-451b-8b68-4aab54ae1e03.pdf',
+      johnUserId,
+      johnTaskId,
+    );
+    console.log('johnTaskId:', johnTaskId),
+
+    expect(attachment).toHaveProperty('id');
+    expect(attachment.originalName).toBe('test.pdf');
+    expect(attachment.storedName).toBe(
+      'e5cdd1a0-e516-451b-8b68-4aab54ae1e03.pdf',
+    );
+    expect(attachment.mimeType).toBe('application/pdf');
+    expect(attachment.size).toBe(296879);
+    expect(attachment.path).toBe(
+      'uploads/e5cdd1a0-e516-451b-8b68-4aab54ae1e03.pdf',
+    );
+    expect(attachment.userId).toBe(johnUserId);
+    expect(attachment.taskId).toBe(johnTaskId);
+  });
+
+  it('should upload a PDF attachment through the API', async () => {
+    // 1. Login as John
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: TEST_USERS.john.email,
+        password: TEST_USERS.john.password,
+      });
+
+    expect(loginResponse.status).toBe(200);
+
+    const token = loginResponse.body.data.token;
+
+    // 2. Upload a PDF to John's task
+    const pdfBuffer = Buffer.from(
+      '%PDF-1.4\nTest PDF content\n%%EOF',
+    );
+
+    const response = await request(app)
+      .post(`/api/tasks/${johnTaskId}/attachments`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', pdfBuffer, 'test.pdf');
+
+    // 3. Check response
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
+
+    expect(response.body.data).toHaveProperty('id');
+    expect(response.body.data.originalName).toBe('test.pdf');
+    expect(response.body.data.mimeType).toBe('application/pdf');
+    expect(response.body.data.taskId).toBe(johnTaskId);
+    expect(response.body.data.userId).toBe(johnUserId);
+  });
+
+  it('should return 400 when no file is provided', async () => {
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: TEST_USERS.john.email,
+        password: TEST_USERS.john.password,
+      });
+
+    expect(loginResponse.status).toBe(200);
+
+    const token = loginResponse.body.data.token;
+
+    const response = await request(app)
+      .post(`/api/tasks/${johnTaskId}/attachments`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(400);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: 'File is required',
+    });
+  });
+
+  it('should return 400 when file type is not allowed', async () => {
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: TEST_USERS.john.email,
+        password: TEST_USERS.john.password,
+      });
+
+    expect(loginResponse.status).toBe(200);
+
+    const token = loginResponse.body.data.token;
+
+    const response = await request(app)
+      .post(`/api/tasks/${johnTaskId}/attachments`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach(
+        'file',
+        Buffer.from('This is not a PDF'),
+        {
+          filename: 'test.txt',
+          contentType: 'text/plain',
+        },
+      );
+
+    expect(response.status).toBe(400);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: 'Only PDF, JPEG, and PNG files are allowed',
+    });
+  });
+
+  it('should return 400 when file is larger than 5 MB', async () => {
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: TEST_USERS.john.email,
+        password: TEST_USERS.john.password,
+      });
+
+    expect(loginResponse.status).toBe(200);
+
+    const token = loginResponse.body.data.token;
+
+    const largeFile = Buffer.alloc(5 * 1024 * 1024 + 1);
+
+    const response = await request(app)
+      .post(`/api/tasks/${johnTaskId}/attachments`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', largeFile, {
+        filename: 'large.pdf',
+        contentType: 'application/pdf',
+      });
+
+    expect(response.status).toBe(400);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: 'File too large. Maximum size is 5 MB',
+    });
+  });
+
+  it('should return 403 when another USER uploads to someone else\'s task', async () => {
+    // 1. Login as the other user
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: TEST_USERS.otherUser.email,
+        password: TEST_USERS.otherUser.password,
+      });
+
+    expect(loginResponse.status).toBe(200);
+
+    const token = loginResponse.body.data.token;
+
+    // 2. Try uploading to John's task
+    const response = await request(app)
+      .post(`/api/tasks/${johnTaskId}/attachments`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', Buffer.from('fake pdf content'), {
+        filename: 'test.pdf',
+        contentType: 'application/pdf',
+      });
+
+    expect(response.status).toBe(403);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: 'You are not allowed to modify this task',
+    });
+  });
+
+  it('should delete the uploaded file when attachment creation fails', async () => {
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email: TEST_USERS.john.email,
+        password: TEST_USERS.john.password,
+      });
+
+    expect(loginResponse.status).toBe(200);
+
+    const token = loginResponse.body.data.token;
+
+    const filesBefore = await readdir('uploads');
+
+    const response = await request(app)
+      .post('/api/tasks/999999/attachments')
+      .set('Authorization', `Bearer ${token}`)
+      .attach(
+        'file',
+        Buffer.from('%PDF-1.4\nTest PDF content\n%%EOF'),
+        'cleanup-test.pdf',
+      );
+
+    expect(response.status).toBe(404);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: 'Task not found',
+    });
+
+    const filesAfter = await readdir('uploads');
+
+    expect(filesAfter).toEqual(filesBefore);
   });
 
   it('should return 400 when title is missing', async () => {

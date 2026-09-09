@@ -166,6 +166,50 @@ export const updateTask = async (
   return updatedTask;
 };
 
+export const createTaskAttachment = async (
+  originalName: string,
+  storedName: string,
+  mimeType: string,
+  size: number,
+  path: string,
+  userId: number,
+  taskId: number,
+  userRole?: UserRole,
+) => {
+  const task = await prisma.task.findUnique({
+    where: {
+      id: taskId,
+    },
+  });
+
+  if (!task) {
+    throw new AppError('Task not found', 404);
+  }
+
+  if (
+    task.userId !== userId &&
+    userRole !== UserRole.ADMIN
+  ) {
+    throw new AppError(
+      'You are not allowed to modify this task',
+      403,
+    );
+  }
+
+  const attachment = await prisma.taskAttachment.create({
+    data: {
+      originalName,
+      storedName,
+      mimeType,
+      size,
+      path,
+      userId,
+      taskId,
+    },
+  });
+
+  return attachment;
+};
 
 export const deleteTask = async (
   taskId: number,
