@@ -18,6 +18,13 @@ enum TaskStatus {
   COMPLETED
 }
 
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   name      String
@@ -30,6 +37,7 @@ model User {
   tasks     Task[]
   auditLogs AuditLog[]
   attachments TaskAttachment[]
+  payments  Payment[]
 }
 
 model Task {
@@ -68,4 +76,30 @@ model TaskAttachment {
 
   task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user         User     @relation(fields: [userId], references: [id])
+}
+
+model Payment {
+  id                Int           @id @default(autoincrement())
+  amount            Int
+  currency          String        @default("usd")
+  status            PaymentStatus @default(PENDING)
+
+  provider          String
+  providerPaymentId String        @unique
+
+  userId            Int
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  user              User          @relation(fields: [userId], references: [id])
+}
+
+model WebhookEvent {
+  id                Int      @id @default(autoincrement())
+  provider          String
+  providerEventId   String   @unique
+  providerPaymentId String
+  status            String
+  createdAt         DateTime @default(now())
 }
