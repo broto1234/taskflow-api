@@ -1,4 +1,11 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  expect,
+  it,
+  beforeEach,
+  afterEach,
+  vi,
+} from 'vitest';
 import request from 'supertest';
 import app from '../app.js';
 import prisma from '../lib/prisma.js';
@@ -6,11 +13,23 @@ import { createPayment } from '../services/payment.service.js';
 import stripe from '../lib/stripe.js';
 import { env } from '../config/env.js';
 
+const { createPaymentIntentMock } = vi.hoisted(() => ({
+  createPaymentIntentMock: vi.fn(),
+}));
+
+vi.mock('../services/stripe.service.js', () => ({
+  createPaymentIntent: createPaymentIntentMock,
+}));
+
 describe('Payment webhook', () => {
   let userId: number;
   let providerPaymentId: string;
 
   beforeEach(async () => {
+    createPaymentIntentMock.mockResolvedValue({
+      id: `pi_test_${Date.now()}`,
+    });
+
     const user = await prisma.user.create({
       data: {
         name: 'Webhook Test User',
