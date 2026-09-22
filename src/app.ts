@@ -70,7 +70,6 @@ app.use('/api/users', userRouter);
 app.use('/api/tasks', taskAttachmentRouter);
 app.use('/api/payments', paymentRouter);
 
-
 app.use(errorHandler);
 
 export default app;

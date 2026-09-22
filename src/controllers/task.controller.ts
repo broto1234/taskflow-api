@@ -9,6 +9,7 @@ import {
 import { TaskQuery } from '../schemas/pagination.schema.js';
 import { AppError } from '../errors/AppError.js';
 import type { TaskIdParams } from '../schemas/task.schema.js';
+import { taskQueue } from '../queues/task.queue.js';
 
 // GET /api/tasks
 export const getTasks = async (
@@ -70,6 +71,11 @@ export const addTask = async (
   const userId = req.userId!;
 
   const data = await createTask(title, userId, description, status);
+
+  await taskQueue.add('processTask', {
+    taskId: data.id,
+    userId,
+  });
   
   res.status(201).json({
     success: true,

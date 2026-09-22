@@ -1,0 +1,1 @@
+import './task.worker.js';
