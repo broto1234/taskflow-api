@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build": "tsc"
   },
   "keywords": [],
   "author": "Satyobroto Talukder",

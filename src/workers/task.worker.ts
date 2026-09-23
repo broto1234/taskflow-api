@@ -1,6 +1,9 @@
 import { Worker } from 'bullmq';
 import prisma from '../lib/prisma.js';
 
+
+const redisUrl = new URL(process.env.REDIS_URL!);
+
 export const taskWorker = new Worker(
   'taskQueue',
   async (job) => {
@@ -28,8 +31,8 @@ export const taskWorker = new Worker(
   },
   {
     connection: {
-      host: 'localhost',
-      port: 6379,
+      host: redisUrl.hostname,
+      port: Number(redisUrl.port),
     },
   },
 );
