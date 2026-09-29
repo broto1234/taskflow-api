@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import app from '../app.js';
 import prisma from '../lib/prisma.js';
@@ -10,7 +10,13 @@ describe('Payment webhook', () => {
   let userId: number;
   let providerPaymentId: string;
 
+  
+
   beforeEach(async () => {
+    vi.spyOn(stripe.paymentIntents, 'create').mockResolvedValue({
+      id: `pi_test_${Date.now()}`,
+    } as any);
+
     const user = await prisma.user.create({
       data: {
         name: 'Webhook Test User',
@@ -33,6 +39,9 @@ describe('Payment webhook', () => {
   });
 
   afterEach(async () => {
+
+    vi.restoreAllMocks();
+    
     await prisma.webhookEvent.deleteMany({
       where: {
         providerPaymentId,
