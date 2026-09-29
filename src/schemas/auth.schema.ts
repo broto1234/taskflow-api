@@ -45,3 +45,29 @@ export const jwtPayloadSchema = z.object({
 });
 
 export type JwtPayload = z.infer<typeof jwtPayloadSchema>;
+
+
+// Forgot password + TypeScript
+export const forgotPasswordSchema = z.object({
+  email: z.email({
+    error: 'Invalid email address',
+  }),
+});
+
+export type ForgotPassword = z.infer<typeof forgotPasswordSchema>;
+
+
+// Reset password schema + TypeScript
+export const resetPasswordSchema = z.object({
+  token: z
+    .string()
+    .min(1, {
+      error: 'Reset token is required',
+    }),
+
+  newPassword: z
+    .string()
+    .min(6, 'Password must be at least 6 characters long'),
+});
+
+export type ResetPassword = z.infer<typeof resetPasswordSchema>;

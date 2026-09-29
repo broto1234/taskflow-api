@@ -38,6 +38,7 @@ model User {
   auditLogs AuditLog[]
   attachments TaskAttachment[]
   payments  Payment[]
+  passwordResetTokens PasswordResetToken[]
 }
 
 model Task {
@@ -102,4 +103,14 @@ model WebhookEvent {
   providerPaymentId String
   status            String
   createdAt         DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

@@ -232,29 +232,3 @@ Run tests in watch mode:
 ```bash
 npm run test:watch
 ```
-
-Current test suite:
-
-```text
-4 test files
-40 tests
-40 passing
-```
-
-## Development Philosophy
-
-TaskFlow API was built with a focus on:
-
-* Clear separation of responsibilities
-* Secure authentication and authorization
-* Input validation
-* Consistent error handling
-* Testable application logic
-* Practical API documentation
-* Maintainable project structure
-
-The project intentionally avoids unnecessary complexity while demonstrating common patterns used in modern TypeScript backend development.
-
-## License
-
-This project is licensed under the MIT License.

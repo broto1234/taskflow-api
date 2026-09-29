@@ -1,10 +1,26 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { add } = vi.hoisted(() => ({
+  add: vi.fn(),
+}));
+
+vi.mock('../queues/email.queue.js', () => ({
+  emailQueue: {
+    add,
+  },
+}));
+
+
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import app from '../app.js';
 import { env } from '../../src/config/env.js';
 import prisma from '../lib/prisma.js';
 import bcrypt from 'bcryptjs';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 beforeAll(async () => {
   const password = await bcrypt.hash('secret123', 10);
@@ -31,6 +47,7 @@ afterAll(async () => {
         { email: { startsWith: 'duplicate-' } },
         { email: { startsWith: 'register-login-' } },
         { email: { startsWith: 'default-role-' } },
+        { email: { startsWith: 'reset-api-' } },
       ],
     },
   });
@@ -58,6 +75,13 @@ describe('POST /api/auth/register', () => {
     expect(response.body.data.email).toBe(email);
 
     expect(response.body.data).not.toHaveProperty('password');
+
+    expect(add).toHaveBeenCalledWith( 'sendWelcomeEmail',
+      {
+        email,
+        name: 'Test User',
+      },
+    );
   });
 
   it('should return 409 when the email is already registered', async () => {
@@ -296,6 +320,100 @@ describe('POST /api/auth/login', () => {
   });
 });
 
+
+describe('POST /api/auth/forgot-password', () => {
+  it('should return a generic response for an existing user', async () => {
+    const response = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({
+        email: 'john@exampleq.com',
+      });
+
+    expect(response.status).toBe(200);
+
+    expect(response.body).toEqual({
+      success: true,
+      message: 'If the account exists, a password reset email has been sent.',
+    });
+
+    expect(add).toHaveBeenCalledWith(
+      'sendPasswordResetEmail',
+      expect.objectContaining({
+        email: 'john@exampleq.com',
+        token: expect.any(String),
+      }),
+    );
+  });
+
+  it('should return the same response for a non-existent user', async () => {
+    const response = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({
+        email: 'does-not-exist@example.com',
+      });
+
+    expect(response.status).toBe(200);
+
+    expect(response.body).toEqual({
+      success: true,
+      message: 'If the account exists, a password reset email has been sent.',
+    });
+
+    expect(add).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('POST /api/auth/reset-password', () => {
+  it('should reset the password with a valid token', async () => {
+    const email = `reset-api-${Date.now()}@example.com`;
+    const oldPassword = 'old-password';
+    const newPassword = 'new-password-123';
+
+    const password = await bcrypt.hash(oldPassword, 10);
+
+    const user = await prisma.user.create({
+      data: {
+        name: 'Reset API User',
+        email,
+        password,
+      },
+    });
+
+    const resetToken = await prisma.passwordResetToken.create({
+      data: {
+        token: `reset-api-token-${Date.now()}`,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      },
+    });
+
+    const response = await request(app)
+      .post('/api/auth/reset-password')
+      .send({
+        token: resetToken.token,
+        newPassword,
+      });
+
+    expect(response.status).toBe(200);
+
+    expect(response.body).toEqual({
+      success: true,
+      message: 'Password reset successfully.',
+    });
+
+    const loginResponse = await request(app)
+      .post('/api/auth/login')
+      .send({
+        email,
+        password: newPassword,
+      });
+
+    expect(loginResponse.status).toBe(200);
+    expect(loginResponse.body.success).toBe(true);
+    expect(loginResponse.body.data).toHaveProperty('token');
+  });
+});
 
 describe('GET /api/tasks', () => {
   it('should return 401 when no token is provided', async () => {

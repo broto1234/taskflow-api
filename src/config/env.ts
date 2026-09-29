@@ -22,6 +22,11 @@ const envSchema = z.object({
   
   STRIPE_WEBHOOK_SECRET: z.string().min(1),
 
+  MAIL_HOST: z.string().min(1),
+  MAIL_PORT: z.coerce.number().int().positive(),
+  MAIL_USER: z.string().min(1),
+  MAIL_PASSWORD: z.string().min(1),
+
 });
 
 export const env = envSchema.parse(process.env);
