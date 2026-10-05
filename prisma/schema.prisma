@@ -52,6 +52,8 @@ model Task {
   userId      Int
   user        User       @relation(fields: [userId], references: [id])
   attachments TaskAttachment[]
+
+  @@index([userId, createdAt])
 }
 
 model AuditLog {
