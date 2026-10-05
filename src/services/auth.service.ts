@@ -82,5 +82,3 @@ export const loginUser = async (
     token,
   };
 };
-
-

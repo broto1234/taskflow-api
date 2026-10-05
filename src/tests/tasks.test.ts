@@ -3,9 +3,14 @@ import prisma from '../lib/prisma.js';
 import request from 'supertest';
 import app from '../app.js';
 import { createTestUsers, cleanupTestUsers, TEST_USERS } from './fixtures/user.fixture.js';
-import { createTaskWithAudit, createTaskAttachment } from '../services/task.service.js';
+import { createTask, createTaskWithAudit, createTaskAttachment, updateTask, deleteTask } from '../services/task.service.js';
 import { readdir } from 'node:fs/promises';
-
+import { UserRole } from '../generated/prisma/client.js';
+import http from 'node:http';
+import WebSocket from 'ws';
+import { createWebSocketServer } from '../websocket.js';
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
 
 describe('/api/tasks', async() => {
   let johnUserId: number;
@@ -13,6 +18,10 @@ describe('/api/tasks', async() => {
   let adminUserId: number;
   let johnTaskId: number;
   let otherUserTaskId: number;
+
+  let testServer!: http.Server;
+  let wss: ReturnType<typeof createWebSocketServer> | undefined;
+  let port!: number;
   
   beforeAll(async () => {
     const { john, otherUser, admin } = await createTestUsers();
@@ -45,10 +54,515 @@ describe('/api/tasks', async() => {
 
     johnTaskId = johnTask.id;
     otherUserTaskId = otherUserTask.id;
+
+    testServer = http.createServer(app);
+
+    wss = createWebSocketServer(testServer);
+
+    await new Promise<void>((resolve) => {
+      testServer.listen(0, () => {
+        const address = testServer.address();
+
+        if (address && typeof address !== 'string') {
+          port = address.port;
+        }
+
+        resolve();
+      });
+    });
   });
 
   afterAll(async () => {
+    wss?.close();
+    testServer?.close();
     await cleanupTestUsers();
+  });
+
+  const createWebSocketToken = (userId: number) => {
+    return jwt.sign(
+      {
+        userId,
+        role: UserRole.USER,
+      },
+      env.JWT_SECRET,
+      {
+        expiresIn: '1h',
+      },
+    );
+  };
+
+  it('broadcasts task.created when a task is created', async () => {
+    const socket = new WebSocket(`ws://localhost:${port}`);
+
+    const token = createWebSocketToken(johnUserId);
+
+    const authenticatePromise = new Promise<void>((resolve, reject) => {
+      socket.once('message', (message) => {
+        const event = JSON.parse(message.toString());
+
+        expect(event.type).toBe('authenticate');
+        expect(event.data.success).toBe(true);
+
+        resolve();
+      });
+
+      socket.once('error', reject);
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', () => resolve());
+      socket.once('error', reject);
+    });
+
+    socket.send(
+      JSON.stringify({
+        type: 'authenticate',
+        data: {
+          token,
+        },
+      }),
+    );
+
+    await authenticatePromise;
+
+    const taskCreatedPromise = new Promise<any>((resolve, reject) => {
+      socket.on('message', (message) => {
+        const event = JSON.parse(message.toString());
+
+        if (event.type === 'task.created') {
+          resolve(event);
+        }
+      });
+
+      socket.once('error', reject);
+    });
+
+    const task = await createTask(
+      'WebSocket test task',
+      johnUserId,
+    );
+
+    const event = await taskCreatedPromise;
+
+    expect(event.type).toBe('task.created');
+    expect(event.data).toEqual({
+      taskId: task.id,
+    });
+
+    socket.close();
+  });
+
+  it('broadcasts task.updated when a task is updated', async () => {
+    const socket = new WebSocket(`ws://localhost:${port}`);
+
+    const messages: any[] = [];
+
+    socket.on('message', (message) => {
+      messages.push(JSON.parse(message.toString()));
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', () => resolve());
+      socket.once('error', reject);
+    });
+
+    const token = createWebSocketToken(johnUserId);
+
+    socket.send(
+      JSON.stringify({
+        type: 'authenticate',
+        data: {
+          token,
+        },
+      }),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Give the welcome event a moment to arrive.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const updatedTask = await updateTask(
+      johnTaskId,
+      johnUserId,
+      'Updated WebSocket task',
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const event = messages.find(
+      (message) => message.type === 'task.updated',
+    );
+
+    expect(event).toBeDefined();
+    expect(event.data).toEqual({
+      taskId: updatedTask.id,
+    });
+
+    socket.close();
+  });
+
+
+  it('broadcasts task.deleted when a task is deleted', async () => {
+    
+    const task = await createTask(
+      'WebSocket delete test task',
+      johnUserId,
+    );
+    
+    const socket = new WebSocket(`ws://localhost:${port}`);
+
+    const messages: any[] = [];
+
+    socket.on('message', (message) => {
+      messages.push(JSON.parse(message.toString()));
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', () => resolve());
+      socket.once('error', reject);
+    });
+
+    const token = createWebSocketToken(johnUserId);
+
+    socket.send(
+      JSON.stringify({
+        type: 'authenticate',
+        data: {
+          token,
+        },
+      }),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const deletedTask = await deleteTask(
+      task.id,
+      johnUserId,
+      UserRole.USER,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const event = messages.find(
+      (message) => message.type === 'task.deleted',
+    );
+
+    expect(event).toBeDefined();
+    expect(event.data).toEqual({
+      taskId: deletedTask.id,
+    });
+
+    socket.close();
+  });
+
+
+  it('authenticates a WebSocket connection with a valid JWT', async () => {
+    const socket = new WebSocket(`ws://localhost:${port}`);
+
+    const token = createWebSocketToken(johnUserId);
+
+    const authenticatePromise = new Promise<any>((resolve, reject) => {
+      socket.on('message', (message) => {
+        const event = JSON.parse(message.toString());
+
+        if (event.type === 'authenticate') {
+          resolve(event);
+        }
+      });
+
+      socket.once('error', reject);
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', () => resolve());
+      socket.once('error', reject);
+    });
+
+    socket.send(
+      JSON.stringify({
+        type: 'authenticate',
+        data: {
+          token,
+        },
+      }),
+    );
+
+    const event = await authenticatePromise;
+
+    expect(event).toEqual({
+      type: 'authenticate',
+      data: {
+        success: true,
+      },
+    });
+
+    socket.close();
+  });
+
+  it('rejects a WebSocket connection with an invalid JWT', async () => {
+    const socket = new WebSocket(`ws://localhost:${port}`);
+
+    const closePromise = new Promise<{ code: number; reason: string }>(
+      (resolve, reject) => {
+        socket.once('close', (code, reason) => {
+          resolve({
+            code,
+            reason: reason.toString(),
+          });
+        });
+
+        socket.once('error', reject);
+      },
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', () => resolve());
+      socket.once('error', reject);
+    });
+
+    socket.send(
+      JSON.stringify({
+        type: 'authenticate',
+        data: {
+          token: 'invalid-token',
+        },
+      }),
+    );
+
+    const result = await closePromise;
+
+    expect(result.code).toBe(1008);
+    expect(result.reason).toBe('Invalid authentication');
+  });
+
+  it('closes an unauthenticated WebSocket connection after timeout', async () => {
+    const socket = new WebSocket(`ws://localhost:${port}`);
+
+    const closePromise = new Promise<{ code: number; reason: string }>(
+      (resolve, reject) => {
+        socket.once('close', (code, reason) => {
+          resolve({
+            code,
+            reason: reason.toString(),
+          });
+        });
+
+        socket.once('error', reject);
+      },
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', () => resolve());
+      socket.once('error', reject);
+    });
+
+    const result = await closePromise;
+
+    expect(result.code).toBe(1008);
+    expect(result.reason).toBe('Authentication timeout');
+  }, 7000);
+
+
+  it("only sends a user's task event to that user", async () => {
+    const johnSocket = new WebSocket(`ws://localhost:${port}`);
+    const otherSocket = new WebSocket(`ws://localhost:${port}`);
+
+    const johnToken = createWebSocketToken(johnUserId);
+    const otherToken = createWebSocketToken(otherUserId);
+
+    const authenticate = (
+      socket: WebSocket,
+      token: string,
+    ) => {
+      return new Promise<void>((resolve, reject) => {
+        const handleMessage = (message: WebSocket.RawData) => {
+          const event = JSON.parse(message.toString());
+
+          if (event.type === 'authenticate') {
+            expect(event.data.success).toBe(true);
+            socket.off('message', handleMessage);
+            resolve();
+          }
+        };
+
+        socket.on('message', handleMessage);
+        socket.once('error', reject);
+
+        socket.send(
+          JSON.stringify({
+            type: 'authenticate',
+            data: {
+              token,
+            },
+          }),
+        );
+      });
+    };
+
+    await Promise.all([
+      new Promise<void>((resolve, reject) => {
+        johnSocket.once('open', () => resolve());
+        johnSocket.once('error', reject);
+      }),
+      new Promise<void>((resolve, reject) => {
+        otherSocket.once('open', () => resolve());
+        otherSocket.once('error', reject);
+      }),
+    ]);
+
+    await Promise.all([
+      authenticate(johnSocket, johnToken),
+      authenticate(otherSocket, otherToken),
+    ]);
+
+    let johnReceivedTaskEvent = false;
+    let otherReceivedTaskEvent = false;
+
+    johnSocket.on('message', (message) => {
+      const event = JSON.parse(message.toString());
+
+      if (event.type === 'task.created') {
+        johnReceivedTaskEvent = true;
+      }
+    });
+
+    otherSocket.on('message', (message) => {
+      const event = JSON.parse(message.toString());
+
+      if (event.type === 'task.created') {
+        otherReceivedTaskEvent = true;
+      }
+    });
+
+    const task = await createTask(
+      'User isolation test task',
+      johnUserId,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(johnReceivedTaskEvent).toBe(true);
+    expect(otherReceivedTaskEvent).toBe(false);
+
+    expect(task.userId).toBe(johnUserId);
+
+    johnSocket.close();
+    otherSocket.close();
+  });
+
+
+  it('broadcasts a normal message to all authenticated clients', async () => {
+    const johnSocket = new WebSocket(`ws://localhost:${port}`);
+    const otherSocket = new WebSocket(`ws://localhost:${port}`);
+
+    const johnToken = createWebSocketToken(johnUserId);
+    const otherToken = createWebSocketToken(otherUserId);
+
+    const waitForOpen = (socket: WebSocket) => {
+      return new Promise<void>((resolve, reject) => {
+        socket.once('open', () => resolve());
+        socket.once('error', reject);
+      });
+    };
+
+    const authenticate = (socket: WebSocket, token: string) => {
+      return new Promise<void>((resolve, reject) => {
+        const handleMessage = (message: WebSocket.RawData) => {
+          const event = JSON.parse(message.toString());
+
+          if (event.type === 'authenticate') {
+            expect(event.data.success).toBe(true);
+            socket.off('message', handleMessage);
+            resolve();
+          }
+        };
+
+        socket.on('message', handleMessage);
+        socket.once('error', reject);
+
+        socket.send(
+          JSON.stringify({
+            type: 'authenticate',
+            data: {
+              token,
+            },
+          }),
+        );
+      });
+    };
+
+    await Promise.all([
+      waitForOpen(johnSocket),
+      waitForOpen(otherSocket),
+    ]);
+
+    await Promise.all([
+      authenticate(johnSocket, johnToken),
+      authenticate(otherSocket, otherToken),
+    ]);
+
+    const johnMessagePromise = new Promise<any>((resolve, reject) => {
+      const handleMessage = (message: WebSocket.RawData) => {
+        const event = JSON.parse(message.toString());
+
+        if (event.type === 'message') {
+          johnSocket.off('message', handleMessage);
+          resolve(event);
+        }
+      };
+
+      johnSocket.on('message', handleMessage);
+      johnSocket.once('error', reject);
+    });
+
+    const otherMessagePromise = new Promise<any>((resolve, reject) => {
+      const handleMessage = (message: WebSocket.RawData) => {
+        const event = JSON.parse(message.toString());
+
+        if (event.type === 'message') {
+          otherSocket.off('message', handleMessage);
+          resolve(event);
+        }
+      };
+
+      otherSocket.on('message', handleMessage);
+      otherSocket.once('error', reject);
+    });
+
+    johnSocket.send(
+      JSON.stringify({
+        type: 'message',
+        data: {
+          message: 'Hello from John',
+        },
+      }),
+    );
+
+    const [johnEvent, otherEvent] = await Promise.all([
+      johnMessagePromise,
+      otherMessagePromise,
+    ]);
+
+    expect(johnEvent).toEqual({
+      type: 'message',
+      data: {
+        message: expect.any(String),
+      },
+    });
+
+    expect(otherEvent).toEqual({
+      type: 'message',
+      data: {
+        message: expect.any(String),
+      },
+    });
+
+    expect(johnEvent.data.message).toContain('Hello from John');
+    expect(otherEvent.data.message).toContain('Hello from John');
+
+    johnSocket.close();
+    otherSocket.close();
   });
 
   it('should return 401 when no token is provided', async () => {

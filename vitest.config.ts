@@ -4,5 +4,9 @@ export default defineConfig({
   test: {
     reporters: ['verbose'],
     fileParallelism: false,
+    exclude: [
+      'dist/**',
+      'node_modules/**',
+    ],
   },
 });

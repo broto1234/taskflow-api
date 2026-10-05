@@ -3,6 +3,7 @@ import { Prisma, TaskStatus, UserRole } from '../generated/prisma/client.js';
 import { AppError } from '../errors/AppError.js';
 import { TaskQuery } from '../schemas/pagination.schema.js';
 import { getCache, setCache, deleteUserTaskCache } from '../lib/cache.js';
+import { broadcastEvent } from '../websocket.js';
 
 export const getAllTasks = async (
   userId: number,
@@ -94,6 +95,13 @@ export const createTask = async (
 
   await deleteUserTaskCache(userId);
 
+  broadcastEvent({
+    type: 'task.created',
+    data: {
+      taskId: task.id,
+    },
+  }, task.userId);
+
   return task;
 };
 
@@ -163,8 +171,16 @@ export const updateTask = async (
 
   await deleteUserTaskCache(task.userId);
 
+  broadcastEvent({
+    type: 'task.updated',
+    data: {
+      taskId: updatedTask.id,
+    },
+  }, task.userId);
+
   return updatedTask;
 };
+
 
 export const createTaskAttachment = async (
   originalName: string,
@@ -211,11 +227,13 @@ export const createTaskAttachment = async (
   return attachment;
 };
 
+
 export const deleteTask = async (
   taskId: number,
   userId: number,
   userRole: UserRole,
 ) => {
+  
   const task = await prisma.task.findUnique({
     where: {
       id: taskId,
@@ -241,6 +259,13 @@ export const deleteTask = async (
   });
 
   await deleteUserTaskCache(task.userId);
+
+  broadcastEvent({
+    type: 'task.deleted',
+    data: {
+      taskId: deletedTask.id,
+    },
+  }, task.userId);
 
   return deletedTask;
 };
