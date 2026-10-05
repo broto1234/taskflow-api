@@ -8,7 +8,7 @@ export const checkDatabase = async () => {
       new Promise((_, reject) =>
         setTimeout(
           () => reject(new Error('Database health check timeout')),
-          1000,
+          5000,
         ),
       ),
     ]);
