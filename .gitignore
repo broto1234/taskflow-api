@@ -1,9 +1,35 @@
-node_modules
+
+# Dependencies
+node_modules/
+
+# Environment variables and secrets
 .env
-.env.docker
+.env.*
+!.env.example
+
+# Build output
 dist/
-.claude
-.windsurf
-.agents
-src/generated/prisma
+build/
+
+# Generated Prisma client
+src/generated/prisma/
+
+# Uploaded files
 uploads/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Editor and AI assistant settings
+.claude/
+.windsurf/
+.agents/
