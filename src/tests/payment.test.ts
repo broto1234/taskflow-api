@@ -1,6 +1,20 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  expect,
+  it,
+  beforeEach,
+  afterEach,
+  vi,
+} from 'vitest';
 import prisma from '../lib/prisma.js';
 import { createPayment, updatePaymentStatus } from '../services/payment.service.js';
+
+vi.mock('../services/stripe.service.js', () => ({
+  createPaymentIntent: vi.fn().mockResolvedValue({
+    id: 'pi_test_123',
+  }),
+}));
+
 
 describe('Payment service', () => {
   let userId: number;
