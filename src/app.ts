@@ -61,6 +61,70 @@ app.use(metricsMiddleware);
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+
+app.get('/', (_req, res) => {
+  res.status(200).send(`
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>TaskFlow API</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            background: #f4f7fb;
+            color: #1e293b;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+          }
+          .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            max-width: 480px;
+            width: calc(100% - 48px);
+            box-sizing: border-box;
+          }
+          h1 {
+            color: #2563eb;
+          }
+          p {
+            color: #64748b;
+            line-height: 1.6;
+          }
+          a {
+            display: block;
+            margin: 16px 0;
+            padding: 12px;
+            background: #2563eb;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+          }
+          a:hover {
+            background: #1d4ed8;
+          }
+        </style>
+      </head>
+      <body>
+        <main class="container">
+          <h1>Welcome to TaskFlow API</h1>
+          <p>Your task management API is up and running.</p>
+          <a href="/api-docs/">View API Documentation</a>
+          <a href="/health">Check API Health</a>
+        </main>
+      </body>
+    </html>
+  `);
+});
+
+
 app.use('/health', healthRouter);  // Health check endpoint
 
 app.use('/metrics', metricsRouter);
