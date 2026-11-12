@@ -1,61 +1,52 @@
+
 # TaskFlow API
 
-A production-minded REST API for task management, built with TypeScript, Express, PostgreSQL, and Prisma.
+A production-ready REST API powering TaskFlow, a full-stack task management application.
 
-TaskFlow API provides secure user authentication, role-based authorization, task management, validation, structured error handling, rate limiting, logging, automated testing, and interactive OpenAPI documentation.
+Built with Node.js, Express, TypeScript, PostgreSQL, and Prisma, featuring secure authentication, role-based authorization, task management, automated testing, and comprehensive API documentation.
 
-## Features
+## 🚀 Live API
 
-* User registration and login
-* JWT-based authentication
-* Role-based access control (`USER` / `ADMIN`)
-* Create, read, update, and delete tasks
-* Task ownership protection
-* Admin-level task management
-* Password hashing with bcrypt
-* Request validation with Zod
-* Centralized error handling
-* PostgreSQL database with Prisma ORM
-* Security headers with Helmet
-* CORS configuration
-* Global and login-specific rate limiting
-* HTTP request logging with Pino
-* Automated API tests with Vitest and Supertest
-* Interactive Swagger/OpenAPI documentation
+- **API Base URL:** [TaskFlow API](https://taskflow-api-c3hg.onrender.com)
+- **API Documentation:** [Swagger UI](https://taskflow-api-c3hg.onrender.com/api-docs/)
+- **Health Check:** [API Health](https://taskflow-api-c3hg.onrender.com/health)
 
-## Tech Stack
+## ✨ Key Features
 
-* **Runtime:** Node.js
-* **Language:** TypeScript
-* **Framework:** Express
-* **Database:** PostgreSQL
-* **ORM:** Prisma
-* **Authentication:** JWT
-* **Validation:** Zod
-* **Password Hashing:** bcryptjs
-* **Logging:** Pino / pino-http
-* **Security:** Helmet, CORS, express-rate-limit
-* **Testing:** Vitest, Supertest
-* **API Documentation:** Swagger / OpenAPI
+- JWT authentication and role-based access control
+- User registration and login
+- Complete task CRUD operations
+- Task ownership and authorization protection
+- Admin-level permissions
+- Request validation with Zod
+- Centralized error handling
+- PostgreSQL database with Prisma ORM
+- Password hashing with bcrypt
+- Security headers and rate limiting
+- Structured logging with Pino
+- Automated API testing with Vitest and Supertest
+- Interactive Swagger/OpenAPI documentation
 
-## Project Structure
 
-```text
-src/
-├── config/          # Environment and Swagger configuration
-├── controllers/     # HTTP request/response handling
-├── errors/          # Application error definitions
-├── lib/             # Prisma and logger setup
-├── middleware/      # Authentication, validation, errors, roles, rate limiting
-├── routes/          # API route definitions
-├── schemas/         # Zod validation schemas
-├── services/        # Business logic
-├── tests/           # Automated API tests
-├── types/           # TypeScript type declarations
-├── generated/       # Generated Prisma client
-├── app.ts           # Express application configuration
-└── server.ts        # Application entry point
-```
+## 🛠️ Technology Stack
+
+| Category | Technologies |
+|---|---|
+| Runtime | Node.js |
+| Language | TypeScript |
+| Framework | Express.js |
+| Database | PostgreSQL (Neon) |
+| ORM | Prisma |
+| Authentication | JWT |
+| Validation | Zod |
+| Password Hashing | bcryptjs |
+| Caching | Redis |
+| Logging | Pino, pino-http |
+| Security | Helmet, CORS, express-rate-limit |
+| Testing | Vitest, Supertest |
+| API Documentation | Swagger / OpenAPI |
+| Containerization | Docker (local Redis development) |
+| Deployment | Render |
 
 ## Getting Started
 
@@ -64,15 +55,15 @@ src/
 Make sure you have installed:
 
 * Node.js
-* PostgreSQL
 * npm
+* A PostgreSQL database (local or hosted, such as Neon)
 
 ### Installation
 
 Clone the repository and install dependencies:
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/broto1234/taskflow-api.git
 cd taskflow-api
 npm install
 ```
@@ -98,7 +89,7 @@ Do not commit your real `.env` file or any secrets to version control.
 
 ### Database
 
-Make sure PostgreSQL is running and your `DATABASE_URL` points to the correct database.
+You can use either a local PostgreSQL instance or a hosted PostgreSQL database (such as Neon). Make sure your `DATABASE_URL` points to the correct database and that the database is accessible.
 
 Run the Prisma migrations:
 
@@ -232,3 +223,24 @@ Run tests in watch mode:
 ```bash
 npm run test:watch
 ```
+
+## ☁️ Deployment
+
+The TaskFlow API is deployed on **Render**, with **Neon PostgreSQL** providing the production database.
+
+- Backend hosting: Render
+- Production database: Neon PostgreSQL
+- Environment configuration: Managed through deployment environment variables
+- API health monitoring: `/health`
+- Interactive API documentation: Swagger UI
+
+Sensitive credentials and environment variables are not stored in the repository.
+
+
+## 🌐 Related Project
+
+TaskFlow is a full-stack application with a separate Next.js frontend.
+
+- **Frontend Repository:** [TaskFlow Frontend](https://github.com/broto1234/taskflow-frontend)
+- **Live Application:** [TaskFlow](https://taskflow-satyobroto.vercel.app)
+- **System Architecture:** See the [Frontend Architecture Documentation](https://github.com/broto1234/taskflow-frontend/blob/main/ARCHITECTURE.md)
