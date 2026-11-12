@@ -224,6 +224,50 @@ Run tests in watch mode:
 npm run test:watch
 ```
 
+## Continuous Integration & Deployment
+
+TaskFlow API uses **GitHub Actions** for Continuous Integration (CI) and **Render** for deployment.
+
+### CI Pipeline
+
+On configured GitHub workflow events, GitHub Actions automatically:
+
+1. Sets up Node.js and installs dependencies using `npm ci`.
+2. Starts PostgreSQL 16 and Redis 7 service containers.
+3. Generates the Prisma Client.
+4. Applies database migrations using `npx prisma migrate deploy`.
+5. Runs the automated test suite using `npm test`.
+6. Verifies the TypeScript build using `npm run build`.
+
+The pipeline helps catch test failures, database migration issues, and TypeScript compilation errors before deployment.
+
+### Test Coverage
+
+Vitest is configured with V8 coverage reporting.
+
+Run tests with coverage locally:
+
+```bash
+npm test -- --coverage
+```
+
+Coverage reports are generated in text and HTML formats.
+
+### Continuous Deployment (CD)
+
+The backend is deployed on Render.
+
+Automatic deployments are configured to run **after CI checks pass**, helping prevent unsuccessful changes from being deployed.
+
+### Production Health Check
+
+Monitor the production API using:
+
+- Health endpoint: https://taskflow-api-c3hg.onrender.com/health
+- API documentation: https://taskflow-api-c3hg.onrender.com/api-docs/
+
+The health endpoint reports the status of the API, database, and Redis connection.
+
 ## ☁️ Deployment
 
 The TaskFlow API is deployed on **Render**, with **Neon PostgreSQL** providing the production database.
